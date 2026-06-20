@@ -8,46 +8,82 @@ client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-# Generate interview questions
-def generate_questions(skills):
+
+# Generate interview question based on difficulty
+def generate_question(skills, difficulty="Easy"):
 
     prompt = f"""
-    Generate 10 technical interview questions for a candidate
-    having these skills:
+Generate ONE interview question.
 
-    {skills}
+Candidate Skills:
+{skills}
 
-    Return only the questions in numbered format.
-    """
+Difficulty Level:
+{difficulty}
+
+Rules:
+
+Easy:
+- Basic concepts
+- Definitions
+- Fundamentals
+- Suitable for freshers
+
+Medium:
+- Practical understanding
+- Real-world scenarios
+- Comparisons between concepts
+
+Hard:
+- Advanced concepts
+- Optimization techniques
+- Deep technical understanding
+
+Additional Rules:
+- Ask only ONE question
+- Make it concise
+- Relevant to the given skills
+- Suitable for a technical interview
+
+Return only the question.
+"""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt
     )
 
-    return response.text
+    return response.text.strip()
 
 
-# Evaluate candidate answer
-def evaluate_answer(answer):
+# Evaluate answer based on question
+def evaluate_answer(question, answer):
 
     prompt = f"""
-    You are an expert technical interviewer.
+You are a senior technical interviewer.
 
-    Evaluate the following interview answer.
+Interview Question:
+{question}
 
-    Candidate Answer:
-    {answer}
+Candidate Answer:
+{answer}
 
-    Provide:
+Evaluate the answer on:
 
-    1. Score out of 10
-    2. Strengths
-    3. Weaknesses
-    4. Improved Answer
+1. Correctness (0-10)
+2. Clarity (0-10)
+3. Technical Depth (0-10)
 
-    Keep the feedback professional and concise.
-    """
+Provide feedback in the following format:
+
+Score:
+Strengths:
+Weaknesses:
+Improvement Suggestions:
+Interview Verdict (Pass/Fail)
+
+Keep feedback concise and professional.
+"""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
