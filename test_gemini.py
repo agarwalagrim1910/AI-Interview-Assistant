@@ -1,3 +1,5 @@
-from utils.gemini_service import test_gemini
+from utils.gemini_service import generate_questions
 
-print(test_gemini())
+skills = ["Java", "Python", "Data Structures"]
+
+print(generate_questions(skills))

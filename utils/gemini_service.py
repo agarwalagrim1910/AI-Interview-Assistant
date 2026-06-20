@@ -8,11 +8,20 @@ client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-def test_gemini():
+def generate_questions(skills):
+
+    prompt = f"""
+    Generate 10 interview questions for a candidate
+    having these skills:
+
+    {skills}
+
+    Return only questions.
+    """
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents="What is JVM?"
+        contents=prompt
     )
 
     return response.text
