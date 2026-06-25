@@ -2,10 +2,19 @@ import streamlit as st
 
 from utils.pdf_parser import extract_text_from_pdf
 from utils.skill_extractor import extract_skills
+from utils.resume_context import extract_resume_context
+
 from utils.gemini_service import (
     generate_question,
     evaluate_answer
 )
+
+from utils.generate_report import generate_pdf_report
+
+
+# --------------------------------------------------
+# Page Configuration
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="AI Interview Assistant",
@@ -18,249 +27,352 @@ st.title("🤖 AI Interview Assistant")
 TOTAL_QUESTIONS = 5
 
 
-# ---------------------------
+# --------------------------------------------------
 # Session State Initialization
-# ---------------------------
+# --------------------------------------------------
 
-if "question_number" not in st.session_state:
-    st.session_state.question_number = 1
+def initialize_session():
 
-if "scores" not in st.session_state:
-    st.session_state.scores = []
+    defaults = {
 
-if "answers" not in st.session_state:
-    st.session_state.answers = []
+        "question_number": 1,
 
-if "feedbacks" not in st.session_state:
-    st.session_state.feedbacks = []
+        "scores": [],
 
-if "questions" not in st.session_state:
-    st.session_state.questions = []
+        "answers": [],
 
-if "evaluated" not in st.session_state:
-    st.session_state.evaluated = False
+        "feedbacks": [],
 
-if "current_result" not in st.session_state:
-    st.session_state.current_result = None
+        "questions": [],
+
+        "evaluated": False,
+
+        "current_result": None,
+
+        "skills": [],
+
+        "resume_text": "",
+
+        # NEW
+        "resume_context": {},
+
+        "question": ""
+
+    }
+
+    for key, value in defaults.items():
+
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
-# ---------------------------
+initialize_session()
+
+
+# --------------------------------------------------
+# Reset Interview
+# --------------------------------------------------
+
+def reset_interview():
+
+    keys = [
+
+        "question_number",
+
+        "scores",
+
+        "answers",
+
+        "feedbacks",
+
+        "questions",
+
+        "evaluated",
+
+        "current_result",
+
+        "skills",
+
+        "resume_text",
+
+        "resume_context",
+
+        "question"
+
+    ]
+
+    for key in keys:
+
+        if key in st.session_state:
+            del st.session_state[key]
+
+    initialize_session()
+
+
+# --------------------------------------------------
 # Difficulty Logic
-# ---------------------------
+# --------------------------------------------------
 
-def get_difficulty(question_no):
+def get_difficulty(question_number):
 
-    if question_no <= 2:
+    if question_number <= 2:
         return "Easy"
 
-    elif question_no <= 4:
+    elif question_number <= 4:
         return "Medium"
 
     else:
         return "Hard"
 
 
-# ---------------------------
+# --------------------------------------------------
 # Resume Upload
-# ---------------------------
+# --------------------------------------------------
 
 uploaded_file = st.file_uploader(
     "Upload your Resume",
     type=["pdf"]
 )
 
-if uploaded_file is not None:
+if uploaded_file is None:
 
-    text = extract_text_from_pdf(uploaded_file)
+    st.info(
+        "Please upload your resume to begin the interview."
+    )
 
-    st.success("✅ Resume Parsed Successfully!")
+    st.stop()
 
-    skills = extract_skills(text)
 
-    st.subheader("🛠 Detected Skills")
+# --------------------------------------------------
+# Parse Resume
+# --------------------------------------------------
+
+if not st.session_state.resume_text:
+
+    with st.spinner("Parsing Resume..."):
+
+        # Extract Resume Text
+
+        st.session_state.resume_text = extract_text_from_pdf(
+            uploaded_file
+        )
+
+        # Extract Skills
+
+        st.session_state.skills = extract_skills(
+            st.session_state.resume_text
+        )
+
+        # Extract Resume Context
+
+        st.session_state.resume_context = extract_resume_context(
+            st.session_state.resume_text
+        )
+
+
+skills = st.session_state.skills
+
+resume_context = st.session_state.resume_context
+# --------------------------------------------------
+# Resume Successfully Parsed
+# --------------------------------------------------
+
+st.success("✅ Resume Parsed Successfully!")
+
+st.subheader("🛠 Detected Skills")
+
+if skills:
 
     for skill in skills:
         st.write("✅", skill)
 
-    # ---------------------------
-    # Final Report
-    # ---------------------------
+else:
 
-    if st.session_state.question_number > TOTAL_QUESTIONS:
-
-        st.header("🎉 Interview Completed")
-
-        avg_score = (
-            sum(st.session_state.scores)
-            / len(st.session_state.scores)
-        )
-
-        st.metric(
-            "Average Score",
-            f"{avg_score:.2f}/10"
-        )
-
-        st.subheader("📋 Question-wise Scores")
-
-        for i, score in enumerate(
-            st.session_state.scores,
-            start=1
-        ):
-            st.write(
-                f"Question {i}: {score}/10"
-            )
-
-        st.subheader("🏆 Final Verdict")
-
-        if avg_score >= 7:
-            st.success(
-                "🚀 Interview Ready"
-            )
-        else:
-            st.warning(
-                "📚 More Practice Needed"
-            )
-
-        if st.button("Start New Interview"):
-
-            st.session_state.question_number = 1
-            st.session_state.scores = []
-            st.session_state.answers = []
-            st.session_state.feedbacks = []
-            st.session_state.questions = []
-            st.session_state.evaluated = False
-            st.session_state.current_result = None
-
-            st.rerun()
-
-        st.stop()
-
-    # ---------------------------
-    # Current Question
-    # ---------------------------
-
-    difficulty = get_difficulty(
-        st.session_state.question_number
+    st.warning(
+        "No predefined skills were detected from the resume."
     )
 
-    st.subheader(
-        f"Question {st.session_state.question_number}/{TOTAL_QUESTIONS}"
-    )
 
+# --------------------------------------------------
+# Resume Context (Debug)
+# Remove this section later if you don't need it.
+# --------------------------------------------------
+
+with st.expander("📄 Resume Context"):
+
+    st.write("### 📌 Projects")
     st.write(
-        f"**Difficulty:** {difficulty}"
+        resume_context.get("projects", "Not Found")
     )
 
-    question_key = (
-        f"question_{st.session_state.question_number}"
+    st.write("### 💼 Experience")
+    st.write(
+        resume_context.get("experience", "Not Found")
     )
 
-    if question_key not in st.session_state:
-
-        with st.spinner(
-            "Generating Question..."
-        ):
-
-            st.session_state[question_key] = (
-                generate_question(
-                    ", ".join(skills),
-                    difficulty
-                )
-            )
-
-    question = st.session_state[question_key]
-
-    st.info(question)
-
-    # ---------------------------
-    # Answer Input
-    # ---------------------------
-
-    user_answer = st.text_area(
-        "Write your answer here",
-        height=200,
-        key=f"answer_{st.session_state.question_number}"
+    st.write("### 🎓 Education")
+    st.write(
+        resume_context.get("education", "Not Found")
     )
 
-    # ---------------------------
-    # Evaluate Button
-    # ---------------------------
+    st.write("### 🏆 Certifications")
+    st.write(
+        resume_context.get("certifications", "Not Found")
+    )
 
-    if not st.session_state.evaluated:
+    st.write("### 🛠 Skills Section")
+    st.write(
+        resume_context.get("skills", "Not Found")
+    )
 
-        if st.button("Evaluate Answer"):
 
-            if user_answer.strip():
+# --------------------------------------------------
+# Current Question
+# --------------------------------------------------
 
-                with st.spinner(
-                    "Evaluating Answer..."
-                ):
+difficulty = get_difficulty(
+    st.session_state.question_number
+)
 
-                    result = evaluate_answer(
-                        question,
-                        user_answer
-                    )
+st.divider()
 
-                score = result.get(
-                    "score",
-                    0
-                )
+st.subheader(
+    f"📝 Question {st.session_state.question_number}/{TOTAL_QUESTIONS}"
+)
 
-                feedback = result.get(
-                    "feedback",
-                    ""
-                )
+st.caption(
+    f"Difficulty : **{difficulty}**"
+)
 
-                verdict = result.get(
-                    "verdict",
-                    "Unknown"
-                )
 
-                st.session_state.questions.append(
-                    question
-                )
+# --------------------------------------------------
+# Generate Question (Only Once)
+# --------------------------------------------------
 
-                st.session_state.answers.append(
+if not st.session_state.question:
+
+    with st.spinner(
+        "Generating Resume-Aware Interview Question..."
+    ):
+
+        st.session_state.question = generate_question(
+
+            skills=", ".join(skills),
+
+            difficulty=difficulty,
+
+            resume_context=resume_context
+
+        )
+
+
+question = st.session_state.question
+
+
+st.info(question)
+
+
+# --------------------------------------------------
+# Candidate Answer
+# --------------------------------------------------
+
+user_answer = st.text_area(
+
+    "Write your answer here",
+
+    height=220,
+
+    key=f"answer_{st.session_state.question_number}"
+
+)
+# --------------------------------------------------
+# Evaluate Answer
+# --------------------------------------------------
+
+if not st.session_state.evaluated:
+
+    if st.button(
+        "✅ Evaluate Answer",
+        use_container_width=True
+    ):
+
+        if user_answer.strip():
+
+            with st.spinner(
+                "Evaluating your answer..."
+            ):
+
+                result = evaluate_answer(
+                    question,
                     user_answer
                 )
 
-                st.session_state.scores.append(
-                    score
-                )
+            score = result.get("score", 0)
 
-                st.session_state.feedbacks.append(
-                    feedback
-                )
+            feedback = result.get(
+                "feedback",
+                ""
+            )
 
-                st.session_state.current_result = {
-                    "score": score,
-                    "feedback": feedback,
-                    "verdict": verdict
-                }
+            verdict = result.get(
+                "verdict",
+                "Unknown"
+            )
 
-                st.session_state.evaluated = True
+            # ------------------------------------------
+            # Save Interview Data
+            # ------------------------------------------
 
-                st.rerun()
+            st.session_state.questions.append(
+                question
+            )
 
-            else:
+            st.session_state.answers.append(
+                user_answer
+            )
 
-                st.warning(
-                    "Please enter an answer first."
-                )
+            st.session_state.scores.append(
+                score
+            )
 
-    # ---------------------------
-    # Show Result
-    # ---------------------------
+            st.session_state.feedbacks.append(
+                feedback
+            )
 
-    if st.session_state.evaluated:
+            st.session_state.current_result = result
 
-        result = st.session_state.current_result
+            st.session_state.evaluated = True
 
-        score = result["score"]
-        feedback = result["feedback"]
-        verdict = result["verdict"]
+            st.rerun()
 
-        st.subheader("📊 AI Feedback")
+        else:
+
+            st.warning(
+                "Please write your answer before evaluation."
+            )
+
+
+# --------------------------------------------------
+# Show Evaluation Result
+# --------------------------------------------------
+
+if st.session_state.evaluated:
+
+    result = st.session_state.current_result
+
+    score = result["score"]
+
+    feedback = result["feedback"]
+
+    verdict = result["verdict"]
+
+    st.divider()
+
+    st.subheader("📊 Evaluation")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
 
         st.metric(
             "Score",
@@ -269,27 +381,178 @@ if uploaded_file is not None:
 
         st.progress(score / 10)
 
-        st.write("### Feedback")
-
-        st.write(feedback)
+    with col2:
 
         if verdict == "Pass":
+
             st.success("✅ Pass")
-        else:
+
+        elif verdict == "Fail":
+
             st.error("❌ Fail")
 
-        if st.button("➡ Next Question"):
+        else:
+
+            st.warning(verdict)
+
+    st.write("### 💬 Feedback")
+
+    st.write(feedback)
+
+
+    # --------------------------------------------------
+    # Next Question
+    # --------------------------------------------------
+
+    if st.session_state.question_number < TOTAL_QUESTIONS:
+
+        if st.button(
+            "➡ Next Question",
+            use_container_width=True
+        ):
 
             st.session_state.question_number += 1
-            st.session_state.evaluated = False
+
+            st.session_state.question = ""
+
             st.session_state.current_result = None
+
+            st.session_state.evaluated = False
 
             st.rerun()
 
-    # ---------------------------
-    # Resume Content
-    # ---------------------------
+    else:
 
-    with st.expander("📄 Resume Content"):
+        if st.button(
+            "🏁 Finish Interview",
+            use_container_width=True
+        ):
 
-        st.text(text)
+            st.session_state.question_number += 1
+
+            st.rerun()
+# --------------------------------------------------
+# Final Interview Report
+# --------------------------------------------------
+
+if st.session_state.question_number > TOTAL_QUESTIONS:
+
+    st.balloons()
+
+    st.header("🎉 Interview Completed")
+
+    average_score = (
+        sum(st.session_state.scores)
+        / len(st.session_state.scores)
+    )
+
+    st.metric(
+        label="Average Score",
+        value=f"{average_score:.2f}/10"
+    )
+
+    st.progress(
+        min(average_score / 10, 1.0)
+    )
+
+    st.divider()
+
+    st.subheader("📋 Interview Summary")
+
+    for i in range(
+        len(st.session_state.questions)
+    ):
+
+        with st.expander(
+            f"Question {i+1}"
+        ):
+
+            st.write(
+                f"**Question:** {st.session_state.questions[i]}"
+            )
+
+            st.write(
+                f"**Your Answer:** {st.session_state.answers[i]}"
+            )
+
+            st.write(
+                f"**Score:** {st.session_state.scores[i]}/10"
+            )
+
+            st.write(
+                f"**Feedback:** {st.session_state.feedbacks[i]}"
+            )
+
+    st.divider()
+
+    st.subheader("🏆 Final Verdict")
+
+    if average_score >= 8:
+
+        st.success(
+            "🌟 Excellent Performance! You are interview ready."
+        )
+
+    elif average_score >= 7:
+
+        st.success(
+            "✅ Good Job! Keep practicing a few advanced topics."
+        )
+
+    elif average_score >= 5:
+
+        st.warning(
+            "📚 Fair Performance. Practice more before interviews."
+        )
+
+    else:
+
+        st.error(
+            "❌ Needs Significant Improvement."
+        )
+
+    # --------------------------------------------------
+    # Generate PDF Report
+    # --------------------------------------------------
+
+    pdf = generate_pdf_report(
+
+        skills=st.session_state.skills,
+
+        questions=st.session_state.questions,
+
+        answers=st.session_state.answers,
+
+        scores=st.session_state.scores,
+
+        feedbacks=st.session_state.feedbacks
+
+    )
+
+    st.download_button(
+
+        label="📥 Download Interview Report",
+
+        data=pdf,
+
+        file_name="AI_Interview_Report.pdf",
+
+        mime="application/pdf",
+
+        use_container_width=True
+
+    )
+
+    st.divider()
+
+    if st.button(
+
+        "🔄 Start New Interview",
+
+        use_container_width=True
+
+    ):
+
+        reset_interview()
+
+        st.rerun()
