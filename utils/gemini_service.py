@@ -5,6 +5,7 @@ import os
 import json
 import time
 import random
+print("Loaded NEW gemini_service.py")
 
 # --------------------------------------------------
 # Load Environment Variables
@@ -17,144 +18,129 @@ client = genai.Client(
 )
 
 # --------------------------------------------------
-# Build Resume Context
-# --------------------------------------------------
-
-def build_resume_context(resume_context: dict) -> str:
-    """
-    Converts the extracted resume dictionary into
-    a clean, structured text block for Gemini.
-    """
-
-    if not resume_context:
-        return "No resume context available."
-
-    sections = []
-
-    field_names = {
-        "projects": "Projects",
-        "experience": "Experience",
-        "education": "Education",
-        "skills": "Skills",
-        "certifications": "Certifications"
-    }
-
-    for key, title in field_names.items():
-
-        value = resume_context.get(key, "")
-
-        if value and value.strip():
-
-            sections.append(
-                f"{title}:\n{value.strip()}"
-            )
-
-    if not sections:
-
-        return "No structured resume information found."
-
-    return "\n\n".join(sections)
-
-
-# --------------------------------------------------
-# Build Interview Prompt
+# Build RAG-Based Interview Prompt
 # --------------------------------------------------
 
 def build_question_prompt(
     skills: str,
     difficulty: str,
-    resume_context: dict
+    retrieved_context: str
 ) -> str:
     """
-    Creates the prompt used for question generation.
+    Builds the interview prompt using
+    retrieved resume context from the
+    RAG pipeline.
     """
 
-    context = build_resume_context(resume_context)
+    if not retrieved_context.strip():
+
+        retrieved_context = (
+            "No relevant resume context was retrieved."
+        )
 
     return f"""
-You are a Senior Technical Interviewer working at one of the world's leading technology companies such as Google, Microsoft, Amazon, Meta or an AI startup.
+You are a Senior Technical Interviewer.
 
-Your task is to conduct a realistic technical interview.
+You are interviewing candidates for top
+technology companies such as:
 
-===========================
+- Google
+- Microsoft
+- Amazon
+- Meta
+- NVIDIA
+- OpenAI
+- AI Startups
+
+========================================
 Candidate Skills
-===========================
+========================================
 
 {skills}
 
-===========================
-Candidate Resume
-===========================
+========================================
+Relevant Resume Context
+========================================
 
-{context}
+{retrieved_context}
 
-===========================
-Difficulty Level
-===========================
+========================================
+Interview Difficulty
+========================================
 
 {difficulty}
 
-Interview Guidelines
+Instructions
 
-1. If the resume contains projects,
-   ALWAYS prioritize asking about those projects.
+The resume context above was retrieved
+using semantic search from the candidate's
+resume.
 
-2. Ask implementation-focused questions.
+Generate ONLY ONE interview question.
 
-3. Ask WHY certain technologies were chosen.
+If the retrieved context contains projects:
 
-4. Ask about architecture,
-   design decisions,
-   optimization,
-   scalability,
-   challenges,
-   improvements.
+- Prioritize project-based questions.
+- Ask implementation questions.
+- Ask design decisions.
+- Ask technology choices.
+- Ask challenges faced.
+- Ask improvements.
 
-5. Avoid generic textbook questions whenever
-   sufficient resume information exists.
+If no projects exist:
 
-6. If projects are unavailable,
-   generate a question using the candidate's skills.
+Generate a technical question using
+the candidate's skills.
 
 Difficulty Rules
 
 Easy
+
 - Fundamentals
 - Definitions
 - Basic implementation
+- Beginner friendly
 
 Medium
+
 - Practical implementation
 - Comparisons
 - Trade-offs
 - Debugging
+- Design decisions
 
 Hard
+
 - Architecture
 - Scalability
 - Optimization
 - Production deployment
+- Performance
 - Edge cases
 
 Rules
 
-• Ask ONLY ONE question.
+- Ask ONLY ONE question.
 
-• Never answer your own question.
+- Never answer your own question.
 
-• Keep it under 80 words.
+- Keep it under 
+80 words.
 
-• Make it sound like a real interviewer.
+- Make it sound like a real interviewer.
 
 Return ONLY the interview question.
-"""# --------------------------------------------------
+"""
+
+
+# --------------------------------------------------
 # Skill-Aware Fallback Questions
 # --------------------------------------------------
 
 def get_fallback_questions(skills: str):
     """
-    Returns fallback questions based on the
-    candidate's detected skills.
+    Returns fallback interview questions based
+    on the detected skills.
     """
 
     skills = skills.lower()
@@ -171,61 +157,70 @@ def get_fallback_questions(skills: str):
 
             "What are Python decorators?",
 
-            "Explain the difference between deep copy and shallow copy.",
+            "Explain deep copy and shallow copy.",
 
             "How does exception handling work in Python?",
 
             "What are generators and why are they useful?"
+
         ]
 
     elif any(skill in skills for skill in [
+
         "machine learning",
         "deep learning",
         "tensorflow",
         "keras",
         "pytorch",
         "bert"
+
     ]):
 
         return [
-
-            "Why do we split data into training and testing sets?",
 
             "Explain the Bias-Variance Tradeoff.",
 
-            "Why did you choose BERT over traditional NLP techniques?",
+            "Why did you choose BERT instead of traditional NLP techniques?",
 
             "What is overfitting and how can it be prevented?",
 
-            "How would you deploy a Machine Learning model into production?"
+            "How would you deploy a Machine Learning model into production?",
+
+            "Explain the difference between training, validation and testing datasets."
+
         ]
 
     elif any(skill in skills for skill in [
+
         "sql",
         "mysql",
         "postgresql"
+
     ]):
 
         return [
 
-            "What is normalization?",
-
-            "Explain SQL indexes.",
+            "Explain SQL Indexes.",
 
             "Difference between DELETE, TRUNCATE and DROP.",
 
             "How do JOIN operations work?",
 
+            "What is Normalization?",
+
             "What is a Primary Key?"
+
         ]
 
     elif any(skill in skills for skill in [
+
         "java"
+
     ]):
 
         return [
 
-            "Explain JVM, JRE and JDK.",
+            "Explain JVM, JDK and JRE.",
 
             "How does HashMap work internally?",
 
@@ -234,22 +229,22 @@ def get_fallback_questions(skills: str):
             "Explain Java Multithreading.",
 
             "What is Polymorphism?"
+
         ]
 
-    else:
+    return [
 
-        return [
+        "Tell me about one technical project you are proud of.",
 
-            "Tell me about one technical project you are proud of.",
+        "Describe one technical challenge you solved.",
 
-            "Explain one technical challenge you solved.",
+        "Which technology do you enjoy working with the most and why?",
 
-            "Describe your favorite technology and why you like it.",
+        "How do you approach debugging?",
 
-            "How do you approach debugging?",
+        "Explain one difficult problem you solved recently."
 
-            "Explain one difficult problem you solved recently."
-        ]
+    ]
 
 
 # --------------------------------------------------
@@ -259,10 +254,12 @@ def get_fallback_questions(skills: str):
 def generate_question(
     skills,
     difficulty="Easy",
-    resume_context=None
+    retrieved_context=""
 ):
+    print("NEW generate_question called")
     """
-    Generates one resume-aware interview question.
+    Generates one interview question using
+    retrieved RAG context.
     """
 
     prompt = build_question_prompt(
@@ -271,7 +268,8 @@ def generate_question(
 
         difficulty=difficulty,
 
-        resume_context=resume_context
+        retrieved_context=retrieved_context
+
     )
 
     fallback_questions = get_fallback_questions(
@@ -301,7 +299,6 @@ def generate_question(
                 )
 
             return question
-
         except Exception as e:
 
             print(
@@ -322,6 +319,8 @@ def generate_question(
     return random.choice(
         fallback_questions
     )
+
+
 # --------------------------------------------------
 # Build Evaluation Prompt
 # --------------------------------------------------
@@ -339,19 +338,19 @@ You are a Senior Technical Interviewer.
 
 Your task is to evaluate a candidate's interview answer.
 
-===========================
+========================================
 Interview Question
-===========================
+========================================
 
 {question}
 
-===========================
+========================================
 Candidate Answer
-===========================
+========================================
 
 {answer}
 
-Evaluate the answer on the following criteria:
+Evaluate the answer based on the following:
 
 1. Technical Accuracy
 2. Depth of Knowledge
@@ -365,7 +364,7 @@ Scoring Guidelines
 Excellent answer with strong technical depth.
 
 7-8
-Good answer with minor gaps.
+Good answer with only minor gaps.
 
 5-6
 Average understanding.
@@ -400,8 +399,6 @@ Rules
 
 Return ONLY JSON.
 """
-
-
 # --------------------------------------------------
 # Evaluate Candidate Answer
 # --------------------------------------------------
@@ -411,7 +408,9 @@ def evaluate_answer(
     answer
 ):
     """
-    Evaluates the candidate answer using Gemini.
+    Evaluates the candidate's answer using Gemini.
+    Returns a JSON response containing
+    score, feedback and verdict.
     """
 
     prompt = build_evaluation_prompt(
@@ -445,13 +444,14 @@ def evaluate_answer(
 
             result = json.loads(cleaned)
 
-            # -----------------------------
-            # Validation
-            # -----------------------------
+            score = int(
+                result.get("score", 0)
+            )
 
-            score = int(result.get("score", 0))
-
-            score = max(0, min(score, 10))
+            score = max(
+                0,
+                min(score, 10)
+            )
 
             verdict = result.get(
                 "verdict",
@@ -476,10 +476,8 @@ def evaluate_answer(
         except Exception as e:
 
             print(
-
                 f"[Evaluation] Attempt "
                 f"{attempt+1}/5 failed:"
-
             )
 
             print(e)
