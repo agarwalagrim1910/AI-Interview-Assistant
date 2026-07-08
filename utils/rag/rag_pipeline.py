@@ -2,6 +2,7 @@ from utils.rag.chunker import create_chunks
 from utils.rag.embedder import embed_chunks
 from utils.rag.vector_store import VectorStore
 from utils.rag.retriever import Retriever
+from utils.rag.reranker import Reranker
 
 
 class RAGPipeline:
@@ -14,6 +15,8 @@ class RAGPipeline:
         self.vector_store = VectorStore()
 
         self.retriever = None
+
+        self.reranker = Reranker(top_n=2)
 
         self.is_initialized = False
 
@@ -52,10 +55,11 @@ class RAGPipeline:
     def retrieve_context(
         self,
         query: str,
-        top_k: int = 3
+        top_k: int = 5
     ):
         """
-        Retrieves the most relevant resume chunks.
+        Retrieves and reranks the most relevant
+        resume chunks.
         """
 
         if not self.is_initialized:
@@ -64,10 +68,16 @@ class RAGPipeline:
                 "RAG Pipeline has not been initialized."
             )
 
-        return self.retriever.retrieve(
+        retrieved_chunks = self.retriever.retrieve(
             query=query,
             top_k=top_k
         )
+
+        reranked_chunks = self.reranker.rerank(
+            retrieved_chunks
+        )
+
+        return reranked_chunks
 
     # --------------------------------------------------
     # Helper
@@ -76,10 +86,10 @@ class RAGPipeline:
     def retrieve_context_as_text(
         self,
         query: str,
-        top_k: int = 3
+        top_k: int = 5
     ):
         """
-        Returns retrieved chunks as one string.
+        Returns the reranked chunks as one string.
         """
 
         chunks = self.retrieve_context(
@@ -87,4 +97,6 @@ class RAGPipeline:
             top_k=top_k
         )
 
-        return "\n\n".join(chunks)
+        return "\n\n".join(
+            chunk["text"] for chunk in chunks
+        )

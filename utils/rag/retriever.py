@@ -9,38 +9,29 @@ class Retriever:
     """
 
     def __init__(self, vector_store: VectorStore):
-
         self.vector_store = vector_store
-
-    # ------------------------------------------
-    # Retrieve Top K Chunks
-    # ------------------------------------------
 
     def retrieve(
         self,
         query: str,
-        top_k: int = 3
+        top_k: int = 5
     ):
         """
-        Retrieves the most relevant chunks
-        for a given query.
+        Retrieve the Top-K most relevant resume chunks.
 
         Args:
-            query: User query
-            top_k: Number of chunks to retrieve
+            query (str): Search query.
+            top_k (int): Number of chunks to retrieve.
 
         Returns:
-            List of relevant chunks
+            List of retrieved chunks ranked by similarity.
         """
 
         query_embedding = get_embedding(query)
 
         results = self.vector_store.search(
-
-            query_embedding,
-
-            top_k
-
+            query_embedding=query_embedding,
+            top_k=top_k
         )
 
         return results

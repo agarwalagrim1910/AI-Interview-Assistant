@@ -1,5 +1,9 @@
 import streamlit as st
-
+from database.db import (
+    create_tables,
+    save_interview,
+    get_interviews
+)
 from utils.pdf_parser import extract_text_from_pdf
 from utils.skill_extractor import extract_skills
 
@@ -15,6 +19,7 @@ from utils.generate_report import (
 from utils.rag.rag_pipeline import (
     RAGPipeline
 )
+from interview.manager import InterviewManager
 
 
 # --------------------------------------------------
@@ -43,16 +48,16 @@ TOTAL_QUESTIONS = 5
 def initialize_session():
 
     defaults = {
+        
+        "saved_to_db": False,
 
         "question_number": 1,
 
+        "current_difficulty": "Easy",
+
+        "interview_manager": InterviewManager(),
+
         "scores": [],
-
-        "answers": [],
-
-        "feedbacks": [],
-
-        "questions": [],
 
         "evaluated": False,
 
@@ -80,6 +85,162 @@ def initialize_session():
 
 
 initialize_session()
+create_tables()
+# --------------------------------------------------
+# Sidebar Navigation
+# --------------------------------------------------
+
+page = st.sidebar.radio(
+
+    "Navigation",
+
+    [
+        "Interview",
+        "History"
+    ]
+
+)
+# --------------------------------------------------
+# Interview History Page
+# --------------------------------------------------
+
+if page == "History":
+
+    st.title(
+        "📜 Interview History"
+    )
+
+    history = get_interviews()
+
+
+    if not history:
+
+        st.info(
+            "No interviews found yet."
+        )
+
+
+    for item in history:
+
+        (
+            interview_id,
+            date,
+            skills,
+            questions,
+            answers,
+            scores,
+            feedbacks,
+            average_score,
+            verdict
+
+        ) = item
+
+
+        st.subheader(
+            f"Interview #{interview_id}"
+        )
+
+
+        st.write(
+            f"📅 Date: {date}"
+        )
+
+
+        st.write(
+            f"⭐ Score: {average_score}/10"
+        )
+
+
+        st.write(
+            f"🏆 Verdict: {verdict}"
+        )
+
+
+        with st.expander(
+            "View Details"
+        ):
+
+            import json
+
+
+            questions = json.loads(
+                questions
+            )
+
+            answers = json.loads(
+                answers
+            )
+
+            scores = json.loads(
+                scores
+            )
+
+            feedbacks = json.loads(
+                feedbacks
+            )
+
+
+            for i in range(
+                len(questions)
+            ):
+
+                st.write(
+                    f"### Question {i+1}"
+                )
+
+                st.write(
+                    questions[i]
+                )
+
+                st.write(
+                    "**Answer:**"
+                )
+
+                st.write(
+                    answers[i]
+                )
+
+                st.write(
+                    f"Score: {scores[i]}/10"
+                )
+
+                st.write(
+                    feedbacks[i]
+                )
+
+
+    st.stop()
+# --------------------------------------------------
+# Session Safety Check
+# --------------------------------------------------
+
+required_states = {
+
+    "questions": [],
+
+    "answers": [],
+
+    "scores": [],
+
+    "feedbacks": [],
+
+    "evaluated": False,
+
+    "current_result": None,
+
+    "question": "",
+
+    "current_difficulty": "Easy",
+
+    "interview_manager": InterviewManager()
+
+}
+
+for key, value in required_states.items():
+
+    if key not in st.session_state:
+
+        st.session_state[key] = value
 
 
 # --------------------------------------------------
@@ -89,8 +250,14 @@ initialize_session()
 def reset_interview():
 
     keys = [
+        
+        "saved_to_db",
 
         "question_number",
+
+        "current_difficulty",
+
+        "interview_manager",
 
         "scores",
 
@@ -219,49 +386,43 @@ if not st.session_state.resume_text:
             resume_text
         )
 
-        # -----------------------------
-        # Build RAG Pipeline
-        # -----------------------------
+# --------------------------------------------------
+# Build RAG Pipeline (Only Once)
+# --------------------------------------------------
 
-try:
+if st.session_state.get("rag_pipeline") is None:
 
-    rag_pipeline = RAGPipeline()
+    try:
 
-    with st.spinner(
-        "Building Resume Knowledge Base..."
-    ):
+        rag_pipeline = RAGPipeline()
 
-        rag_pipeline.build(
-            resume_text
+        with st.spinner(
+            "Building Resume Knowledge Base..."
+        ):
+
+            rag_pipeline.build(
+                st.session_state.resume_text
+            )
+
+        st.session_state.rag_pipeline = (
+            rag_pipeline
         )
 
-    st.session_state.rag_pipeline = (
-        rag_pipeline
-    )
+    except Exception as e:
 
-except Exception as e:
+        st.error(
+            f"Failed to build Resume Knowledge Base:\n{e}"
+        )
 
-    st.error(
-        f"Failed to build Resume Knowledge Base:\n{e}"
-    )
+        st.stop()
 
-    st.stop()
-
+# --------------------------------------------------
+# Get Session Objects
+# --------------------------------------------------
 
 skills = st.session_state.skills
 
-rag_pipeline = st.session_state.get(
-    "rag_pipeline"
-)
-
-if rag_pipeline is None:
-
-    st.error(
-        "Resume knowledge base could not be created."
-    )
-
-    st.stop()
-
+rag_pipeline = st.session_state.rag_pipeline
 
 # --------------------------------------------------
 # Resume Parsed Successfully
@@ -296,9 +457,7 @@ else:
 # Current Question
 # --------------------------------------------------
 
-difficulty = get_difficulty(
-    st.session_state.question_number
-)
+difficulty = st.session_state.current_difficulty
 
 st.divider()
 
@@ -313,9 +472,6 @@ st.caption(
 )
 
 
-# --------------------------------------------------
-# Generate Interview Question
-# --------------------------------------------------
 
 # --------------------------------------------------
 # Generate Interview Question
@@ -328,11 +484,11 @@ if not st.session_state.question:
     )
 
     retrieved_context = (
-        rag_pipeline.retrieve_context_as_text(
-            retrieval_query,
-            top_k=3
-        )
+    rag_pipeline.retrieve_context_as_text(
+        retrieval_query,
+        top_k=5
     )
+)
 
     if not retrieved_context.strip():
 
@@ -353,13 +509,23 @@ if not st.session_state.question:
 
         st.session_state.question = generate_question(
 
-            skills=skills_string,
+    skills=skills_string,
 
-            difficulty=difficulty,
+    difficulty=difficulty,
 
-            retrieved_context=retrieved_context
+    retrieved_context=retrieved_context,
 
-        )
+    previous_questions=st.session_state.get(
+        "questions",
+        []
+    ),
+
+    performance_context=(
+        st.session_state.interview_manager
+        .get_performance_context()
+    )
+
+)
 
 question = st.session_state.question
 
@@ -407,6 +573,18 @@ if not st.session_state.evaluated:
                 "score",
                 0
             )
+            
+            st.session_state.interview_manager.analyze_performance(
+             score,
+             question
+            )
+            st.session_state.current_difficulty = (
+    st.session_state.interview_manager.decide_difficulty(
+        st.session_state.current_difficulty,
+        score
+    )
+)
+
 
             feedback = result.get(
                 "feedback",
@@ -568,10 +746,57 @@ if st.session_state.question_number > TOTAL_QUESTIONS:
 
     st.header("🎉 Interview Completed")
 
+
     average_score = (
         sum(st.session_state.scores)
         / len(st.session_state.scores)
     )
+
+
+    # --------------------------------------------------
+    # Save Interview History
+    # --------------------------------------------------
+
+    if not st.session_state.saved_to_db:
+
+        if average_score >= 8:
+
+            final_verdict = "Excellent"
+
+        elif average_score >= 6:
+
+            final_verdict = "Good"
+
+        elif average_score >= 4:
+
+            final_verdict = "Average"
+
+        else:
+
+            final_verdict = "Needs Improvement"
+
+
+        save_interview(
+
+            skills=st.session_state.skills,
+
+            questions=st.session_state.questions,
+
+            answers=st.session_state.answers,
+
+            scores=st.session_state.scores,
+
+            feedbacks=st.session_state.feedbacks,
+
+            average_score=average_score,
+
+            verdict=final_verdict
+
+        )
+
+
+        st.session_state.saved_to_db = True
+
 
     st.metric(
 
@@ -653,19 +878,19 @@ if st.session_state.question_number > TOTAL_QUESTIONS:
 
         )
 
-    elif average_score >= 7:
+    elif average_score >= 6:
 
         st.success(
 
-            "✅ Good Job! Keep practicing advanced interview questions."
+            "✅ Good Performance! Improve some technical depth."
 
         )
 
-    elif average_score >= 5:
+    elif average_score >= 4:
 
         st.warning(
 
-            "📚 Fair Performance. Practice more before interviews."
+            "📚 Average Performance. Revise weak areas and practice more."
 
         )
 
@@ -673,7 +898,7 @@ if st.session_state.question_number > TOTAL_QUESTIONS:
 
         st.error(
 
-            "❌ Needs Significant Improvement."
+           "❌ Needs Improvement. Focus on fundamentals first."
 
         )
 

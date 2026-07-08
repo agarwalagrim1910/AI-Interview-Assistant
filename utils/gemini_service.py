@@ -5,6 +5,7 @@ import os
 import json
 import time
 import random
+from utils.prompt_builder import build_interview_prompt
 print("Loaded NEW gemini_service.py")
 
 # --------------------------------------------------
@@ -16,122 +17,6 @@ load_dotenv()
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-
-# --------------------------------------------------
-# Build RAG-Based Interview Prompt
-# --------------------------------------------------
-
-def build_question_prompt(
-    skills: str,
-    difficulty: str,
-    retrieved_context: str
-) -> str:
-    """
-    Builds the interview prompt using
-    retrieved resume context from the
-    RAG pipeline.
-    """
-
-    if not retrieved_context.strip():
-
-        retrieved_context = (
-            "No relevant resume context was retrieved."
-        )
-
-    return f"""
-You are a Senior Technical Interviewer.
-
-You are interviewing candidates for top
-technology companies such as:
-
-- Google
-- Microsoft
-- Amazon
-- Meta
-- NVIDIA
-- OpenAI
-- AI Startups
-
-========================================
-Candidate Skills
-========================================
-
-{skills}
-
-========================================
-Relevant Resume Context
-========================================
-
-{retrieved_context}
-
-========================================
-Interview Difficulty
-========================================
-
-{difficulty}
-
-Instructions
-
-The resume context above was retrieved
-using semantic search from the candidate's
-resume.
-
-Generate ONLY ONE interview question.
-
-If the retrieved context contains projects:
-
-- Prioritize project-based questions.
-- Ask implementation questions.
-- Ask design decisions.
-- Ask technology choices.
-- Ask challenges faced.
-- Ask improvements.
-
-If no projects exist:
-
-Generate a technical question using
-the candidate's skills.
-
-Difficulty Rules
-
-Easy
-
-- Fundamentals
-- Definitions
-- Basic implementation
-- Beginner friendly
-
-Medium
-
-- Practical implementation
-- Comparisons
-- Trade-offs
-- Debugging
-- Design decisions
-
-Hard
-
-- Architecture
-- Scalability
-- Optimization
-- Production deployment
-- Performance
-- Edge cases
-
-Rules
-
-- Ask ONLY ONE question.
-
-- Never answer your own question.
-
-- Keep it under 
-80 words.
-
-- Make it sound like a real interviewer.
-
-Return ONLY the interview question.
-"""
-
 
 # --------------------------------------------------
 # Skill-Aware Fallback Questions
@@ -254,27 +139,41 @@ def get_fallback_questions(skills: str):
 def generate_question(
     skills,
     difficulty="Easy",
-    retrieved_context=""
+    retrieved_context="",
+    previous_questions=None,
+    performance_context=""
 ):
     print("NEW generate_question called")
+
     """
     Generates one interview question using
-    retrieved RAG context.
+    RAG + adaptive performance context.
     """
 
-    prompt = build_question_prompt(
+    if previous_questions is None:
+
+        previous_questions = []
+
+
+    prompt = build_interview_prompt(
 
         skills=skills,
 
         difficulty=difficulty,
 
-        retrieved_context=retrieved_context
+        retrieved_context=retrieved_context,
+
+        previous_questions=previous_questions,
+
+        performance_context=performance_context
 
     )
+
 
     fallback_questions = get_fallback_questions(
         skills
     )
+
 
     for attempt in range(5):
 
@@ -288,9 +187,14 @@ def generate_question(
 
             )
 
+
             question = response.text.strip()
 
-            question = question.replace("*", "")
+            question = question.replace(
+                "*",
+                ""
+            )
+
 
             if not question:
 
@@ -298,23 +202,31 @@ def generate_question(
                     "Gemini returned an empty response."
                 )
 
+
             return question
+
+
         except Exception as e:
 
             print(
+
                 f"[Question Generation] Attempt "
                 f"{attempt+1}/5 failed:"
+
             )
 
             print(e)
+
 
             if attempt < 4:
 
                 time.sleep(3)
 
+
     print(
         "Using fallback interview question..."
     )
+
 
     return random.choice(
         fallback_questions
