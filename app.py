@@ -1,4 +1,6 @@
 import streamlit as st
+from utils.ats.ats_analyzer import analyze_resume
+
 from database.db import (
     create_tables,
     save_interview,
@@ -36,11 +38,14 @@ st.set_page_config(
 
 )
 
+
 st.title("🤖 AI Interview Assistant")
 
+
+
+
+
 TOTAL_QUESTIONS = 5
-
-
 # --------------------------------------------------
 # Session State Initialization
 # --------------------------------------------------
@@ -379,6 +384,16 @@ if not st.session_state.resume_text:
         st.session_state.resume_text = resume_text
 
         # -----------------------------
+        # ATS Analysis
+        # -----------------------------
+
+        ats_result = analyze_resume(
+            resume_text
+        )
+
+        st.session_state.ats_result = ats_result
+
+        # -----------------------------
         # Extract Skills
         # -----------------------------
 
@@ -386,41 +401,106 @@ if not st.session_state.resume_text:
             resume_text
         )
 
-# --------------------------------------------------
-# Build RAG Pipeline (Only Once)
-# --------------------------------------------------
+        # -----------------------------
+        # Build RAG Pipeline
+        # -----------------------------
 
-if st.session_state.get("rag_pipeline") is None:
+        try:
 
-    try:
+            rag_pipeline = RAGPipeline()
 
-        rag_pipeline = RAGPipeline()
+            with st.spinner(
+                "Building Resume Knowledge Base..."
+            ):
 
-        with st.spinner(
-            "Building Resume Knowledge Base..."
-        ):
+                rag_pipeline.build(
+                    resume_text
+                )
 
-            rag_pipeline.build(
-                st.session_state.resume_text
+            st.session_state.rag_pipeline = (
+                rag_pipeline
             )
 
-        st.session_state.rag_pipeline = (
-            rag_pipeline
-        )
+        except Exception as e:
 
-    except Exception as e:
+            st.error(
+                f"Failed to build Resume Knowledge Base:\n{e}"
+            )
 
-        st.error(
-            f"Failed to build Resume Knowledge Base:\n{e}"
-        )
-
-        st.stop()
+            st.stop()
 
 # --------------------------------------------------
 # Get Session Objects
 # --------------------------------------------------
 
 skills = st.session_state.skills
+# --------------------------------------------------
+# ATS Resume Analysis
+# --------------------------------------------------
+
+if "ats_result" in st.session_state:
+
+    ats = st.session_state.ats_result
+
+    st.divider()
+
+    st.subheader("📄 ATS Resume Analysis")
+
+    # -----------------------------------------
+    # ATS Score
+    # -----------------------------------------
+
+    st.metric(
+
+        label="⭐ ATS Score",
+
+        value=f"{ats['ats_score']}/100"
+
+    )
+
+    st.progress(
+
+        ats["ats_score"] / 100
+
+    )
+
+    # -----------------------------------------
+    # Score Breakdown
+    # -----------------------------------------
+
+    st.subheader("📊 Score Breakdown")
+
+    for category, score in ats["breakdown"].items():
+
+        st.write(f"**{category}:** {score}")
+
+    # -----------------------------------------
+    # Detected Skills
+    # -----------------------------------------
+
+    st.subheader("✅ Detected Skills")
+
+    if ats["detected_skills"]:
+
+        st.write(", ".join(ats["detected_skills"]))
+
+    else:
+
+        st.warning("No technical skills detected.")
+
+    # -----------------------------------------
+    # Missing Skills
+    # -----------------------------------------
+
+    st.subheader("⚠️ Recommended Skills")
+
+    if ats["missing_skills"]:
+
+        st.write(", ".join(ats["missing_skills"][:15]))
+
+    else:
+
+        st.success("Excellent skill coverage!")
 
 rag_pipeline = st.session_state.rag_pipeline
 

@@ -1,8 +1,16 @@
 streamlit
 google-genai
 python-dotenv
+
+# PDF Processing
 PyPDF2
 reportlab
+
+# RAG + Embeddings
 sentence-transformers
 faiss-cpu
 numpy
+
+# Database
+# sqlite3 is built into Python (no install needed)
+
