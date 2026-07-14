@@ -408,3 +408,119 @@ def evaluate_answer(
         "verdict": "Unknown"
 
     }
+# --------------------------------------------------
+# Job Match Analysis
+# --------------------------------------------------
+
+def generate_job_match_analysis(
+    match_result
+):
+    """
+    Generates AI feedback for Resume vs Job Description matching.
+    """
+
+    prompt = f"""
+You are an experienced Technical Recruiter.
+
+Analyze the resume-job matching result below.
+
+Match Score:
+{match_result["match_score"]}%
+
+Matched Skills:
+{', '.join(match_result["matched_skills"])}
+
+Missing Skills:
+{', '.join(match_result["missing_skills"])}
+
+Resume Skills:
+{', '.join(match_result["resume_skills"])}
+
+Job Description Skills:
+{', '.join(match_result["jd_skills"])}
+
+Return ONLY valid JSON.
+
+Example:
+
+{{
+    "overall_feedback": "The resume is a good match for this role.",
+
+    "strengths": [
+        "...",
+        "..."
+    ],
+
+    "missing_skill_analysis": [
+        "...",
+        "..."
+    ],
+
+    "resume_improvements": [
+        "...",
+        "..."
+    ],
+
+    "application_recommendation":
+        "Apply Now"
+}}
+
+Rules:
+
+- Return ONLY JSON.
+- Do not include markdown.
+- Keep feedback concise.
+"""
+
+    for attempt in range(5):
+
+        try:
+
+            response = client.models.generate_content(
+
+                model="gemini-2.5-flash",
+
+                contents=prompt
+
+            )
+
+            cleaned = (
+
+                response.text
+
+                .replace("```json", "")
+
+                .replace("```", "")
+
+                .strip()
+
+            )
+
+            return json.loads(cleaned)
+
+        except Exception as e:
+
+            print(
+                f"[Job Match] Attempt {attempt+1}/5 failed:"
+            )
+
+            print(e)
+
+            if attempt < 4:
+                time.sleep(3)
+
+    return {
+
+        "overall_feedback":
+        "Unable to generate AI analysis.",
+
+        "strengths": [],
+
+        "missing_skill_analysis": [],
+
+        "resume_improvements": [],
+
+        "application_recommendation":
+        "Analysis unavailable"
+
+    }

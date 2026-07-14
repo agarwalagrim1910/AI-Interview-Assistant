@@ -1,65 +1,164 @@
-# utils/ats/job_matcher.py
-
 from utils.skill_extractor import extract_skills
+from utils.skill_database import SKILL_WEIGHTS
+from utils.gemini_service import generate_job_match_analysis
 
 
-class JobMatcher:
+def match_resume_with_job(
+    resume_text,
+    job_description
+):
     """
-    Compares a resume with a job description
-    and generates a job match report.
+    Compare Resume Skills with Job Description Skills.
+
+    Pipeline
+
+    Resume
+        ↓
+    Extract Resume Skills
+        ↓
+    Extract JD Skills
+        ↓
+    Weighted Skill Matching
+        ↓
+    Gemini Analysis
+        ↓
+    Return Complete Report
     """
-
-    def __init__(self):
-
-        pass
 
     # -----------------------------------------
-    # Extract JD Skills
+    # Extract Skills
     # -----------------------------------------
 
-    def extract_job_skills(
-        self,
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    jd_skills = extract_skills(
         job_description
-    ):
+    )
 
-        return extract_skills(
-            job_description
+    # -----------------------------------------
+    # Convert to Sets
+    # -----------------------------------------
+
+    resume_set = {
+
+        skill.lower()
+
+        for skill in resume_skills
+
+    }
+
+    jd_set = {
+
+        skill.lower()
+
+        for skill in jd_skills
+
+    }
+
+    # -----------------------------------------
+    # Matched Skills
+    # -----------------------------------------
+
+    matched_skills = sorted(
+
+        resume_set & jd_set
+
+    )
+
+    # -----------------------------------------
+    # Missing Skills
+    # -----------------------------------------
+
+    missing_skills = sorted(
+
+        jd_set - resume_set
+
+    )
+
+    # -----------------------------------------
+    # Weighted Match Score
+    # -----------------------------------------
+
+    total_weight = 0
+    matched_weight = 0
+
+    for skill in jd_set:
+
+        weight = SKILL_WEIGHTS.get(
+            skill,
+            1
         )
 
-    # -----------------------------------------
-    # Compare Skills
-    # -----------------------------------------
+        total_weight += weight
 
-    def compare_skills(
-        self,
-        resume_skills,
-        jd_skills
-    ):
+        if skill in resume_set:
 
-        pass
+            matched_weight += weight
 
-    # -----------------------------------------
-    # Match Score
-    # -----------------------------------------
+    if total_weight == 0:
 
-    def calculate_match_score(
-        self,
-        matched,
-        missing,
-        total_required
-    ):
+        match_score = 0
 
-        pass
+    else:
+
+        match_score = round(
+
+            (matched_weight / total_weight) * 100
+
+        )
 
     # -----------------------------------------
     # Gemini Analysis
     # -----------------------------------------
 
-    def generate_match_analysis(
-        self,
-        resume_text,
-        job_description,
-        score
-    ):
+    gemini_analysis = generate_job_match_analysis(
 
-        pass
+        {
+
+            "match_score": match_score,
+
+            "matched_skills": matched_skills,
+
+            "missing_skills": missing_skills,
+
+            "resume_skills": sorted(
+                resume_set
+            ),
+
+            "jd_skills": sorted(
+                jd_set
+            )
+
+        }
+
+    )
+
+    # -----------------------------------------
+    # Return Complete Result
+    # -----------------------------------------
+
+    return {
+
+        "match_score": match_score,
+
+        "matched_skills": matched_skills,
+
+        "missing_skills": missing_skills,
+
+        "resume_skills": sorted(
+            resume_set
+        ),
+
+        "jd_skills": sorted(
+            jd_set
+        ),
+
+        "matched_weight": matched_weight,
+
+        "total_weight": total_weight,
+
+        "gemini_analysis": gemini_analysis
+
+    }

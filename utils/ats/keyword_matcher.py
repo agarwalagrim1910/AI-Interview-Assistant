@@ -1,84 +1,9 @@
-# utils/ats/keyword_matcher.py
+from utils.skill_database import SKILL_DATABASE
 
-# --------------------------------------------------
-# Common ATS Skills Database
-# --------------------------------------------------
-
-ATS_SKILLS = {
-
-    "Programming": [
-
-        "python", "java", "c", "c++", "javascript",
-        "typescript", "sql", "r"
-
-    ],
-
-    "AI/ML": [
-
-        "machine learning",
-        "deep learning",
-        "nlp",
-        "computer vision",
-        "bert",
-        "tensorflow",
-        "keras",
-        "pytorch",
-        "scikit-learn"
-
-    ],
-
-    "Data": [
-
-        "pandas",
-        "numpy",
-        "matplotlib",
-        "seaborn",
-        "power bi",
-        "excel"
-
-    ],
-
-    "Backend": [
-
-        "flask",
-        "django",
-        "fastapi",
-        "streamlit"
-
-    ],
-
-    "Database": [
-
-        "mysql",
-        "postgresql",
-        "mongodb",
-        "sqlite"
-
-    ],
-
-    "Cloud & DevOps": [
-
-        "docker",
-        "kubernetes",
-        "aws",
-        "azure",
-        "gcp",
-        "git",
-        "github",
-        "ci/cd"
-
-    ]
-
-}
-
-
-# --------------------------------------------------
-# Keyword Matcher
-# --------------------------------------------------
 
 def match_keywords(resume_text):
     """
-    Detects ATS keywords from the resume.
+    Detects ATS keywords using the central skill database.
     """
 
     resume = resume_text.lower()
@@ -87,11 +12,11 @@ def match_keywords(resume_text):
 
     missing = []
 
-    for category, skills in ATS_SKILLS.items():
+    for skills in SKILL_DATABASE.values():
 
         for skill in skills:
 
-            if skill in resume:
+            if skill.lower() in resume:
 
                 detected.append(skill)
 

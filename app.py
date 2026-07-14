@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.ats.ats_analyzer import analyze_resume
+from app_pages.ats import show_ats_page
 
 from database.db import (
     create_tables,
@@ -42,7 +43,31 @@ st.set_page_config(
 st.title("🤖 AI Interview Assistant")
 
 
+# --------------------------------------------------
+# Sidebar Navigation
+# --------------------------------------------------
 
+page = st.sidebar.radio(
+
+    "Navigation",
+
+    [
+
+        "Interview",
+
+        "ATS Analyzer",
+
+        "History"
+
+    ]
+
+)
+
+if page == "ATS Analyzer":
+
+    show_ats_page()
+
+    st.stop()
 
 
 TOTAL_QUESTIONS = 5
@@ -91,20 +116,9 @@ def initialize_session():
 
 initialize_session()
 create_tables()
-# --------------------------------------------------
-# Sidebar Navigation
-# --------------------------------------------------
 
-page = st.sidebar.radio(
 
-    "Navigation",
 
-    [
-        "Interview",
-        "History"
-    ]
-
-)
 # --------------------------------------------------
 # Interview History Page
 # --------------------------------------------------
